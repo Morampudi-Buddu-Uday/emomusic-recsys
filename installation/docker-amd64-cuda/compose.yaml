@@ -1,0 +1,83 @@
+services:
+  image-run-root:
+    extends:
+      file: compose-base.yaml
+      service: args-run-root
+    image: ${IMAGE_NAME}:${IMAGE_PLATFORM}-run-latest-root
+    build:
+      platforms:
+        - "linux/amd64"
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-generic
+      args:
+        PROJECT_NAME: ${PROJECT_NAME}
+        PACKAGE_NAME: ${PACKAGE_NAME}
+
+  image-dev-root:
+    extends:
+      service: image-run-root
+    image: ${IMAGE_NAME}:${IMAGE_PLATFORM}-dev-latest-root
+    build:
+      dockerfile: Dockerfile
+      target: development-generic
+
+  image-run-user:
+    extends:
+      service: image-run-root
+    image: ${IMAGE_NAME}:${IMAGE_PLATFORM}-run-latest-${USR}
+    build:
+      dockerfile: Dockerfile-user
+      target: runtime-user
+      args:
+        GENERIC_IMAGE: ${IMAGE_NAME}
+        IMAGE_PLATFORM: ${IMAGE_PLATFORM}
+        GRPID: ${GRPID}
+        USRID: ${USRID}
+        GRP: ${GRP}
+        USR: ${USR}
+        PASSWD: ${PASSWD}
+
+  image-dev-user: # Service to build the development image.
+    extends:
+      service: image-run-user
+    image: ${IMAGE_NAME}:${IMAGE_PLATFORM}-dev-latest-${USR}
+    build:
+      target: development-user
+
+  run-local-cpu: # Service to run the image locally with CPU only.
+    extends:
+      service: image-run-user
+    tty: true
+    stdin_open: true
+    volumes:
+      - ../..:${PROJECT_ROOT_AT}
+    environment:
+      PROJECT_ROOT_AT: ${PROJECT_ROOT_AT}
+      WANDB_API_KEY: ${WANDB_API_KEY}
+    ipc: host                 # Edit as needed (NGC default recommendations).
+    ulimits:                  # Edit as needed (NGC default recommendations).
+      memlock: -1
+      stack: 67108864
+
+  run-local-cuda: # Service to run the image locally with NVIDIA GPU.
+    extends:
+      service: run-local-cpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [ gpu ]
+
+  dev-local-cpu: # Service to develop locally with CPU only.
+    extends:
+      service: run-local-cpu
+    image: ${IMAGE_NAME}:${IMAGE_PLATFORM}-dev-latest-${USR}
+    network_mode: host       # For easier remote development.
+
+  dev-local-cuda: # Service to develop locally with NVIDIA GPU.
+    extends:
+      service: run-local-cuda
+    image: ${IMAGE_NAME}:${IMAGE_PLATFORM}-dev-latest-${USR}
+    network_mode: host       # For easier remote development.
